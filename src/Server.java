@@ -38,13 +38,13 @@ class Server implements Runnable{
 			if (p.getType() == 1){
 				//it's a data packet
 				if (p.getSeqNum() == expectedSequenceNumber){ //<--THIS RIGHT HERE IS THE TRUE CODE
-					if (Math.random() > 0.5){ //<-- This "drops a packet" 10% of the time				
+					if (Math.random() > 0.50){ //<-- This "drops a packet" 10% of the time				
 						fileWriter.print(p.getData());
 						sendAckPacket(p, dataOut);
 						expectedSequenceNumber++;
 					}
 					else{
-						sendExpectationPacket(dataOut);
+						//sendExpectationPacket(dataOut);
 					}
 				}
 				else{

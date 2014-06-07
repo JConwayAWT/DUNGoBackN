@@ -10,6 +10,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Scanner;
@@ -33,7 +34,12 @@ class Client implements Runnable{
 		int totalPackets = packetsList.size();
 		
 		while(sequenceNumber < totalPackets){
-			sendDataPacketFull(packetsList.get(sequenceNumber), serverAddress, finalPort, seqnumlog, acklog);
+			try{
+				sendDataPacketFull(packetsList.get(sequenceNumber), serverAddress, finalPort, seqnumlog, acklog);			
+			}
+			catch(SocketTimeoutException e){
+				System.out.println("Timeout has occurred! Sending again...");
+			}
 		}
 		
 		sendEndOfTransmission(serverAddress, finalPort, seqnumlog, acklog);
@@ -67,7 +73,7 @@ class Client implements Runnable{
 	
 	public static void sendDataPacketFull(
 	packet p, String serverAddress, Integer finalPort, PrintWriter seqnumlog, PrintWriter acklog)
-	throws UnknownHostException, IOException, ClassNotFoundException{
+	throws UnknownHostException, IOException, ClassNotFoundException, SocketTimeoutException{
 		Socket exchangeSocket = new Socket(serverAddress, finalPort);
 		DataOutputStream serverOutput = new DataOutputStream(exchangeSocket.getOutputStream());
 		DataInputStream dataIn = new DataInputStream(exchangeSocket.getInputStream());
@@ -77,8 +83,11 @@ class Client implements Runnable{
 		serverOutput.flush();
 		seqnumlog.println(p.getSeqNum());
 		
+		exchangeSocket.setSoTimeout(800);
+		
 		byte[] message = new byte[1024];
 		dataIn.read(message);
+		
 		packet pIn = makePacketFromByteArray(message);
 		acklog.println(pIn.getSeqNum());
 		
