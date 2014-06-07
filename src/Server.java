@@ -37,11 +37,15 @@ class Server implements Runnable{
 			
 			if (p.getType() == 1){
 				//it's a data packet
-				//if (p.getSeqNum() == expectedSequenceNumber){ <--THIS RIGHT HERE IS THE TRUE CODE
-				if (Math.random() > 0.25 && p.getSeqNum() != 0){ // <--THIS RIGHT HERE FAKES A DROPPED PACKET LOCALLY
-					fileWriter.print(p.getData());
-					sendAckPacket(p, dataOut);
-					expectedSequenceNumber++;
+				if (p.getSeqNum() == expectedSequenceNumber){ //<--THIS RIGHT HERE IS THE TRUE CODE
+					if (Math.random() > 0.5){ //<-- This "drops a packet" 10% of the time				
+						fileWriter.print(p.getData());
+						sendAckPacket(p, dataOut);
+						expectedSequenceNumber++;
+					}
+					else{
+						sendExpectationPacket(dataOut);
+					}
 				}
 				else{
 					sendExpectationPacket(dataOut);
@@ -57,9 +61,6 @@ class Server implements Runnable{
 		fileWriter.close();
 		arrivallog.close();
 		
-		System.out.println("System going down in 2 seconds...");
-		Thread.sleep(2000);
-		
 		exchangeSocket.close();
 		
 	}
@@ -73,7 +74,7 @@ class Server implements Runnable{
 	}
 	
 	public static void sendExpectationPacket(DataOutputStream dataOut) throws IOException{
-		packet pOut = new packet(0, expectedSequenceNumber,0, "");
+		packet pOut = new packet(0, expectedSequenceNumber-1,0, "");
 		byte[] packetAsBytes = makeByteArrayFromPacket(pOut);
 		dataOut.write(packetAsBytes);
 		dataOut.flush();
