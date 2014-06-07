@@ -23,6 +23,7 @@ class Server implements Runnable{
 	
 	public static void main(String args[]) throws Exception{
 		Boolean continueWorking = true;
+		Boolean dropPacket15 = true;
 		fileWriter = new PrintWriter("received.txt","UTF-8");
 		arrivallog = new PrintWriter("arrival.log","UTF-8");
 		setCommandLineVariables(args);
@@ -42,9 +43,15 @@ class Server implements Runnable{
 			if (p.getType() == 1){
 				//it's a data packet
 				if (p.getSeqNum() == expectedSequenceNumber){ //<--THIS RIGHT HERE IS THE TRUE CODE
-					fileWriter.print(p.getData());
-					sendAckPacket(p, dgsOut, iaOut);
-					expectedSequenceNumber++;
+					if (p.getSeqNum() == 15 && dropPacket15){
+						//do nothing
+						dropPacket15 = false;
+					}
+					else{
+						fileWriter.print(p.getData());
+						sendAckPacket(p, dgsOut, iaOut);
+						expectedSequenceNumber++;
+					}
 				}
 				else{
 					sendExpectationPacket(dgsOut, iaOut);
@@ -97,8 +104,6 @@ class Server implements Runnable{
 		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
 		dgsOut.send(dgPacket);
 	}
-	
-	
 	
 	public static packet makePacketFromByteArray(DatagramPacket dgp, byte[] buff) throws IOException, ClassNotFoundException{
 		packet p;

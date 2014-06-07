@@ -20,6 +20,10 @@ import java.util.Scanner;
 
 class Client implements Runnable{
 	public static int sequenceNumber = 0;
+	public static int windowSize = 7;
+	public static int lastSentButUnackedPacketNumber;
+	
+	
 	public static Boolean eclipseMode = true;
 	public static String emulatorName = "localhost";
 	public static int sendToEmulator = 6000;
@@ -49,10 +53,9 @@ class Client implements Runnable{
 		while(sequenceNumber < totalPackets){
 			try{
 				sendDatagramPacket(packetsList.get(sequenceNumber), dgsOut, iaOut);
-				sequenceNumber++;
 			}
 			catch(SocketTimeoutException e){
-				System.out.println("Timeout has occurred! Sending again...");
+				System.out.println("Timeout with SEQNO=" + sequenceNumber);
 			}
 		}
 		
@@ -83,11 +86,13 @@ class Client implements Runnable{
 		byte[] recBuf = new byte[1024];
 		DatagramPacket recpacket = new DatagramPacket(recBuf, recBuf.length);
 		
+		dgsIn.setSoTimeout(2000);
 		dgsIn.receive(recpacket); //<!!--THIS IS A BLOCKING CALL OMG--!!>
 		
 		ByteArrayInputStream inSt = new ByteArrayInputStream(recBuf);
 		ObjectInputStream oinSt = new ObjectInputStream(inSt);        
 		packet p = (packet) oinSt.readObject();
+		sequenceNumber++;
 		return p;
 	}
 	
