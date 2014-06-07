@@ -1,98 +1,110 @@
-import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.ObjectInput;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.UnknownHostException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.SocketAddress;
 
 class Server implements Runnable{
+	public static Boolean eclipseMode = true;
 	public static Integer expectedSequenceNumber = 0;
+	public static String emulatorName;
+	public static Integer receiveFromEmulator;
+	public static Integer sendToEmulator;
+	public static String fileName;
+	public static PrintWriter arrivallog;
+	public static PrintWriter fileWriter;
 	
 	public static void main(String args[]) throws Exception{
 		Boolean continueWorking = true;
-		PrintWriter fileWriter = new PrintWriter("received.txt","UTF-8");
-		PrintWriter arrivallog = new PrintWriter("arrival.log","UTF-8");
+		fileWriter = new PrintWriter("received.txt","UTF-8");
+		arrivallog = new PrintWriter("arrival.log","UTF-8");
+		setCommandLineVariables(args);
 		
-		ServerSocket exchangeSocket = new ServerSocket(6000);		
+		//Connect to the emulator; keep these variables around
+		DatagramSocket dgsOut = new DatagramSocket();
+		InetAddress iaOut = InetAddress.getByName(emulatorName);
+		dgsOut.connect(iaOut, sendToEmulator);
 		
-		
+		//Let things come in from the emulator; keep these variables around
+		DatagramSocket dgsIn;
+		dgsIn = new DatagramSocket(receiveFromEmulator);
 		
 		while (continueWorking){
-			Socket connectionSocket = exchangeSocket.accept();
-			DataOutputStream dataOut = new DataOutputStream(connectionSocket.getOutputStream());
-			DataInputStream dataIn = new DataInputStream(connectionSocket.getInputStream());
-			
-			byte[] message = new byte[1024];
-			dataIn.read(message);
-			packet p = makePacketFromByteArray(message);
-			arrivallog.println(p.getSeqNum());
+			packet p = receiveDatagramAndConvert(dgsIn);
 			
 			if (p.getType() == 1){
 				//it's a data packet
 				if (p.getSeqNum() == expectedSequenceNumber){ //<--THIS RIGHT HERE IS THE TRUE CODE
-					if (Math.random() > 0.50){ //<-- This "drops a packet" 10% of the time				
-						fileWriter.print(p.getData());
-						sendAckPacket(p, dataOut);
-						expectedSequenceNumber++;
-					}
-					else{
-						//sendExpectationPacket(dataOut);
-					}
+					fileWriter.print(p.getData());
+					sendAckPacket(p, dgsOut, iaOut);
+					expectedSequenceNumber++;
 				}
 				else{
-					sendExpectationPacket(dataOut);
+					sendExpectationPacket(dgsOut, iaOut);
 				}
 			}
 			else{
 				//it's an EOT packet
 				continueWorking = false;
-				sendEndOfTransmissionPacket(p, dataOut);
+				sendEndOfTransmissionPacket(p, dgsOut, iaOut);
 			}
 		}		
 		
 		fileWriter.close();
 		arrivallog.close();
-		
-		exchangeSocket.close();
+		dgsIn.close();
+		dgsOut.close();
+		System.out.println("Server down.");
 		
 	}
 	
-	public static void sendEndOfTransmissionPacket(packet pIn, DataOutputStream dataOut) throws IOException{
+	public static packet receiveDatagramAndConvert(DatagramSocket dgsIn) throws IOException, ClassNotFoundException{
+		byte[] recBuf = new byte[1024];
+		DatagramPacket recpacket = new DatagramPacket(recBuf, recBuf.length);
+		
+		dgsIn.receive(recpacket); //<!!--THIS IS A BLOCKING CALL OMG--!!>
+		
+		ByteArrayInputStream inSt = new ByteArrayInputStream(recBuf);
+		ObjectInputStream oinSt = new ObjectInputStream(inSt);        
+		packet p = (packet) oinSt.readObject();
+		arrivallog.println(p.getSeqNum());
+		return p;
+	}
+	public static void sendAckPacket(packet p, DatagramSocket dgs, InetAddress ia) throws IOException{
+		packet pOut = new packet(0, p.getSeqNum(), 0, "");
+		byte[] sendBuf = makeByteArrayFromPacket(pOut);
+		DatagramPacket dgPacket = new DatagramPacket(sendBuf, sendBuf.length, ia, sendToEmulator);
+		dgs.send(dgPacket);
+	}
+	
+	public static void sendExpectationPacket(DatagramSocket dgsOut, InetAddress ia) throws IOException{
+		packet pOut = new packet(0, expectedSequenceNumber,0, "");
+		byte[] packetAsBytes = makeByteArrayFromPacket(pOut);
+		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
+		dgsOut.send(dgPacket);
+	}
+	
+	public static void sendEndOfTransmissionPacket(packet pIn, DatagramSocket dgsOut, InetAddress ia) throws IOException{
 		packet pOut = new packet(2, pIn.getSeqNum(),0,"");
-		
 		byte [] packetAsBytes = makeByteArrayFromPacket(pOut);
-		dataOut.write(packetAsBytes);
-		dataOut.flush();
+		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
+		dgsOut.send(dgPacket);
 	}
 	
-	public static void sendExpectationPacket(DataOutputStream dataOut) throws IOException{
-		packet pOut = new packet(0, expectedSequenceNumber-1,0, "");
-		byte[] packetAsBytes = makeByteArrayFromPacket(pOut);
-		dataOut.write(packetAsBytes);
-		dataOut.flush();
-	}
 	
-	public static void sendAckPacket(packet pIn, DataOutputStream dataOut) throws IOException{
-		packet pOut = new packet(0, pIn.getSeqNum(),0,"");
-		
-		byte[] packetAsBytes = makeByteArrayFromPacket(pOut);
-		dataOut.write(packetAsBytes);
-		dataOut.flush();
-	}
 	
-	public static packet makePacketFromByteArray(byte[] byteArray) throws IOException, ClassNotFoundException{
+	public static packet makePacketFromByteArray(DatagramPacket dgp, byte[] buff) throws IOException, ClassNotFoundException{
 		packet p;
-		ByteArrayInputStream bais = new ByteArrayInputStream(byteArray);
-		ObjectInput in = new ObjectInputStream(bais);
-		p = (packet) in.readObject();
+		ByteArrayInputStream bais = new ByteArrayInputStream(buff);
+		ObjectInputStream oinSt = new ObjectInputStream(bais);
+		p = (packet) oinSt.readObject();
 		return p;
 	}
 	
@@ -103,6 +115,21 @@ class Server implements Runnable{
 		ooSt.close();
 		byte[] sendBuf = oSt.toByteArray();
 		return sendBuf;
+	}
+	
+	public static void setCommandLineVariables(String args[]){
+		if (eclipseMode){
+			emulatorName = "localhost";
+			receiveFromEmulator = 6002;
+			sendToEmulator = 6000;
+			fileName = "inputFile.txt";
+		}
+		else{
+			emulatorName = args[0];
+			receiveFromEmulator = Integer.parseInt(args[1]);
+			sendToEmulator = Integer.parseInt(args[2]);
+			fileName = args[3];
+		}
 	}
 
 	@Override

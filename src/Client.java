@@ -9,6 +9,9 @@ import java.io.ObjectInput;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -17,16 +20,26 @@ import java.util.Scanner;
 
 class Client implements Runnable{
 	public static int sequenceNumber = 0;
+	public static Boolean eclipseMode = true;
+	public static String emulatorName = "localhost";
+	public static int sendToEmulator = 6000;
+	public static int receiveFromEmulator = 6001;
+	public static String fileName = "inputFile.txt";
+	public static PrintWriter seqnumlog;
+	public static PrintWriter acklog;
+	public static DatagramSocket dgsIn;
 	
 	public static void main(String args[]) throws Exception{
-		PrintWriter seqnumlog = new PrintWriter("seqnum.log","UTF-8");
-		PrintWriter acklog = new PrintWriter("ack.log","UTF-8");
+		setCommandLineVariables(args);
 		
-		String serverAddress = "localhost";
-//		Integer finalPort = 6000 + (int)(Math.random() * ((60000 - 6000) + 1));
-		Integer finalPort = 6000;
-		Integer negotiationPort = 6000;
-		String fileName = "inputFile.txt";
+		DatagramSocket dgsOut = new DatagramSocket();
+		InetAddress iaOut = InetAddress.getByName(emulatorName);
+		dgsOut.connect(iaOut, sendToEmulator);
+		
+		dgsIn = new DatagramSocket(receiveFromEmulator);
+		
+		seqnumlog = new PrintWriter("seqnum.log","UTF-8");
+		acklog = new PrintWriter("ack.log","UTF-8");
 		
 		String content = readFileContentsFrom(fileName);
 		ArrayList<packet> packetsList = new ArrayList<packet>();
@@ -35,65 +48,47 @@ class Client implements Runnable{
 		
 		while(sequenceNumber < totalPackets){
 			try{
-				sendDataPacketFull(packetsList.get(sequenceNumber), serverAddress, finalPort, seqnumlog, acklog);			
+				sendDatagramPacket(packetsList.get(sequenceNumber), dgsOut, iaOut);
+				sequenceNumber++;
 			}
 			catch(SocketTimeoutException e){
 				System.out.println("Timeout has occurred! Sending again...");
 			}
 		}
 		
-		sendEndOfTransmission(serverAddress, finalPort, seqnumlog, acklog);
+		sendEndOfTransmission(dgsOut, iaOut);
 		acklog.close();
 		seqnumlog.close();
 		
 	}
 	
 	
-	public static void sendEndOfTransmission(String serverAddress, Integer finalPort, PrintWriter seqnumlog, PrintWriter acklog
+	public static void sendEndOfTransmission(DatagramSocket dgsOut, InetAddress iaOut
 		) throws UnknownHostException, IOException, ClassNotFoundException{
 		packet p = new packet(3, sequenceNumber, 0, "");
-		
-		Socket exchangeSocket = new Socket(serverAddress, finalPort);
-		DataOutputStream serverOutput = new DataOutputStream(exchangeSocket.getOutputStream());
-		DataInputStream dataIn = new DataInputStream(exchangeSocket.getInputStream());
-		
-		byte[] packetAsBytes = makeByteArrayFromPacket(p);
-		serverOutput.write(packetAsBytes);
-		serverOutput.flush();
-		seqnumlog.println(p.getSeqNum());
-		
-		
-		byte[] message = new byte[1024];
-		dataIn.read(message);
-		packet pIn = makePacketFromByteArray(message);
-		acklog.println(pIn.getSeqNum());
-		
-		exchangeSocket.close();
+		sendDatagramPacket(p, dgsOut, iaOut);		
 	}
 	
-	public static void sendDataPacketFull(
-	packet p, String serverAddress, Integer finalPort, PrintWriter seqnumlog, PrintWriter acklog)
-	throws UnknownHostException, IOException, ClassNotFoundException, SocketTimeoutException{
-		Socket exchangeSocket = new Socket(serverAddress, finalPort);
-		DataOutputStream serverOutput = new DataOutputStream(exchangeSocket.getOutputStream());
-		DataInputStream dataIn = new DataInputStream(exchangeSocket.getInputStream());
-		
-		byte[] packetAsBytes = makeByteArrayFromPacket(p);
-		serverOutput.write(packetAsBytes);
-		serverOutput.flush();
+	public static void sendDatagramPacket(packet p, DatagramSocket dgs, InetAddress ia) throws IOException, ClassNotFoundException{
+		byte[] sendBuf = makeByteArrayFromPacket(p);
+		DatagramPacket packet = new DatagramPacket(sendBuf, sendBuf.length, ia, 6000);
+		dgs.send(packet);
 		seqnumlog.println(p.getSeqNum());
 		
-		exchangeSocket.setSoTimeout(800);
-		
-		byte[] message = new byte[1024];
-		dataIn.read(message);
-		
-		packet pIn = makePacketFromByteArray(message);
+		packet pIn = receiveDatagramAndConvert();
 		acklog.println(pIn.getSeqNum());
+	}
+	
+	public static packet receiveDatagramAndConvert() throws IOException, ClassNotFoundException{
+		byte[] recBuf = new byte[1024];
+		DatagramPacket recpacket = new DatagramPacket(recBuf, recBuf.length);
 		
-		sequenceNumber = pIn.getSeqNum() + 1;
+		dgsIn.receive(recpacket); //<!!--THIS IS A BLOCKING CALL OMG--!!>
 		
-		exchangeSocket.close();
+		ByteArrayInputStream inSt = new ByteArrayInputStream(recBuf);
+		ObjectInputStream oinSt = new ObjectInputStream(inSt);        
+		packet p = (packet) oinSt.readObject();
+		return p;
 	}
 	
 	public static byte[] makeByteArrayFromPacket(packet p) throws IOException{
@@ -146,5 +141,14 @@ class Client implements Runnable{
 		}
 		
 		return packetsList;
+	}
+	
+	public static void setCommandLineVariables(String args[]){
+		if (!eclipseMode){
+			emulatorName = args[0];
+			sendToEmulator = Integer.parseInt(args[1]);
+			receiveFromEmulator = Integer.parseInt(args[2]);
+			fileName = args[3];
+		}
 	}
 }
