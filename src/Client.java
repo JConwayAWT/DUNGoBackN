@@ -56,12 +56,16 @@ class Client implements Runnable{
 		dgsIn.setSoTimeout(800);
 		int timesToListen = Math.min(7, totalPackets);
 		int ackNumber = 0;
-		int oldAckNumber = 0;
+		int firstAckNumber = 0;
+		int secondAckNumber = 0;
 		
 		while (ackNumber < totalPackets){
 			try{
 				for(int i = 0; i < timesToListen; i++){
 					ackNumber = receiveDatagramAndConvert().getSeqNum();
+					if (i == 0){firstAckNumber = ackNumber;}
+					if (i == 1){secondAckNumber = ackNumber;}
+					if (i == 1 && firstAckNumber == secondAckNumber){say("Quitting early"); break;}
 					if (ackNumber == totalPackets){break;}
 				}
 				int times = sendAllPacketsInclusiveFromXtoY(ackNumber, ackNumber+6, packetsList, dgsOut, iaOut);
