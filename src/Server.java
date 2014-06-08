@@ -23,7 +23,6 @@ class Server implements Runnable{
 	
 	public static void main(String args[]) throws Exception{
 		Boolean continueWorking = true;
-		Boolean dropPacket15 = true;
 		fileWriter = new PrintWriter("received.txt","UTF-8");
 		arrivallog = new PrintWriter("arrival.log","UTF-8");
 		setCommandLineVariables(args);
@@ -36,6 +35,7 @@ class Server implements Runnable{
 		//Let things come in from the emulator; keep these variables around
 		DatagramSocket dgsIn;
 		dgsIn = new DatagramSocket(receiveFromEmulator);
+		say("Server listening...");
 		
 		while (continueWorking){
 			packet p = receiveDatagramAndConvert(dgsIn);
@@ -62,20 +62,24 @@ class Server implements Runnable{
 		arrivallog.close();
 		dgsIn.close();
 		dgsOut.close();
-		System.out.println("Server down.");
+		say("Server closed.");
 		
+	}
+	
+	public static void say(String s){
+		System.out.println(s);
 	}
 	
 	public static packet receiveDatagramAndConvert(DatagramSocket dgsIn) throws IOException, ClassNotFoundException{
 		byte[] recBuf = new byte[1024];
 		DatagramPacket recpacket = new DatagramPacket(recBuf, recBuf.length);
 		
-		dgsIn.receive(recpacket); //<!!--THIS IS A BLOCKING CALL OMG--!!>
+		dgsIn.receive(recpacket);
 		
 		ByteArrayInputStream inSt = new ByteArrayInputStream(recBuf);
 		ObjectInputStream oinSt = new ObjectInputStream(inSt);        
 		packet p = (packet) oinSt.readObject();
-		printReceivedPacketToConsole(p);
+		say("SERVER: Just received a packet with sequence number: " + p.getSeqNum());
 		arrivallog.println(p.getSeqNum());
 		return p;
 	}
@@ -84,7 +88,7 @@ class Server implements Runnable{
 		byte[] sendBuf = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(sendBuf, sendBuf.length, ia, sendToEmulator);
 		dgs.send(dgPacket);
-		printSentPacketToConsole(p);
+		say("SERVER: Just send a packet with sequence number: " + pOut.getSeqNum());
 	}
 	
 	public static void sendExpectationPacket(DatagramSocket dgsOut, InetAddress ia) throws IOException{
@@ -92,15 +96,15 @@ class Server implements Runnable{
 		byte[] packetAsBytes = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
 		dgsOut.send(dgPacket);
-		printSentPacketToConsole(pOut);
+		say("SERVER: Just send a packet with sequence number: " + pOut.getSeqNum());
 	}
 	
 	public static void sendEndOfTransmissionPacket(packet pIn, DatagramSocket dgsOut, InetAddress ia) throws IOException{
-		packet pOut = new packet(2, pIn.getSeqNum(),0,"");
+		packet pOut = new packet(2, pIn.getSeqNum()+1,0,"");
 		byte [] packetAsBytes = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
 		dgsOut.send(dgPacket);
-		printSentPacketToConsole(pOut);
+		say("SERVER: Just send a packet with sequence number: " + pOut.getSeqNum());
 	}
 	
 	public static packet makePacketFromByteArray(DatagramPacket dgp, byte[] buff) throws IOException, ClassNotFoundException{
@@ -135,16 +139,6 @@ class Server implements Runnable{
 		}
 	}
 	
-	public static void printSentPacketToConsole(packet p){
-		System.out.println("Server just sent a packet: ");
-		p.printContents();
-	}
-	
-	public static void printReceivedPacketToConsole(packet p){
-		System.out.println("Server just received a packet: ");
-		p.printContents();
-	}
-
 	@Override
 	public void run() {
 		// TODO Auto-generated method stub
