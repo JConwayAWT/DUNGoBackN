@@ -22,6 +22,7 @@ class Client implements Runnable{
 	public static int sequenceNumber = 0;
 	public static int windowSize = 7;
 	public static int oldestSentButUnackedPacketNumber = 0;
+	public static int nextUpToSend;
 	
 	public static Boolean eclipseMode = true;
 	public static String emulatorName = "localhost";
@@ -53,30 +54,44 @@ class Client implements Runnable{
 		for(int i = 0; i < windowSize; i++){
 			sendDatagramPacket(packetsList.get(i), dgsOut, iaOut);
 			sequenceNumber++;
-		} //now sequence number = 7
+		} 
 		
+		nextUpToSend = 7;
+		//now sequence number = 7
+		//the sequence number of the last packet that was actually sent = 6
+		//oldestSentButUnackedPacketNumber = 0
+		//we want to grab packetsList(7) next no matter what
+		//but if we get an ack of, say, 5, we need to send from 7 through 5-1+7=11 all at once
 		
 		dgsIn.setSoTimeout(800);
-		while(oldestSentButUnackedPacketNumber < totalPackets)
-		{
+		while (oldestSentButUnackedPacketNumber < totalPackets){
 			try{
 				packet pIn = receiveDatagramAndConvert();
 				int ackNumber = pIn.getSeqNum();
-				if (ackNumber > oldestSentButUnackedPacketNumber){
-					//We received the correct packet.
-					oldestSentButUnackedPacketNumber = ackNumber + 1;
-					sequenceNumber = oldestSentButUnackedPacketNumber + windowSize;
-					if (sequenceNumber < totalPackets){sendDatagramPacket(packetsList.get(sequenceNumber), dgsOut, iaOut);}
+				say("Received a packet: ");
+				say("*** ackNumber = " + ackNumber);
+				say("*** oldestSentUnacked = " + oldestSentButUnackedPacketNumber);
+				if (oldestSentButUnackedPacketNumber == ackNumber){
+					//duplicate ack! resend everything they missed (up to but NOT INCLUDING nextUpToSend)
+					say("***FAILURE BRANCH: ackNumber matches oldestSent already");
+					int maximumAllowed = nextUpToSend - 1;
+					nextUpToSend = ackNumber;
+					sendAllPacketsInclusiveFromXtoY(nextUpToSend, maximumAllowed, packetsList, dgsOut, iaOut);
+					nextUpToSend = maximumAllowed + 1;
+					say("***Next up to send is now equal to " + nextUpToSend);
 				}
 				else{
-					//We got the wrong packet =( Start again from the last sent but unacked packet.
-					sendDatagramPacket(packetsList.get(oldestSentButUnackedPacketNumber), dgsOut, iaOut);
-					sequenceNumber = oldestSentButUnackedPacketNumber;
+					say("***SUCCESS BRANCH: ackNumber didn't match oldestSent already");
+					oldestSentButUnackedPacketNumber = ackNumber;
+					int maximumAllowed = ackNumber + windowSize - 1;
+					sendAllPacketsInclusiveFromXtoY(nextUpToSend, maximumAllowed, packetsList, dgsOut, iaOut);
+					nextUpToSend = maximumAllowed + 1;
+					say("***Next up to send is now equal to " + nextUpToSend);
 				}
+				say("\n");
 			}
 			catch(SocketTimeoutException e){
-				//hm, we're not supposed to have any timeouts...
-				sequenceNumber = 100;
+				//deal with this later
 			}
 		}
 		
@@ -86,6 +101,19 @@ class Client implements Runnable{
 		
 	}
 	
+	public static void say(String s){
+		System.out.println(s);
+	}
+	
+	public static void sendAllPacketsInclusiveFromXtoY(int first, int last, ArrayList<packet> pList, 
+	DatagramSocket dgsOut, InetAddress iaOut) throws ClassNotFoundException, IOException
+	{
+		last = Math.min(last, 22);
+		System.out.println("***Client now sending from " + first + " to " + last + " inclusive!");
+		for(int i=first; i <= last; i++){
+			sendDatagramPacket(pList.get(i), dgsOut, iaOut);
+		}
+	}
 	
 	public static void sendEndOfTransmission(DatagramSocket dgsOut, InetAddress iaOut, int totalPackets
 		) throws UnknownHostException, IOException, ClassNotFoundException{
@@ -179,12 +207,12 @@ class Client implements Runnable{
 	}
 	
 	public static void printSentPacketToConsole(packet p){
-		System.out.println("Client just sent a packet: ");
-		p.printContents();
+		//System.out.println("Client just sent a packet: ");
+		//p.printContents();
 	}
 	
 	public static void printReceivedPacketToConsole(packet p){
-		System.out.println("Client just received a packet: ");
-		p.printContents();
+		//System.out.println("Client just received a packet: ");
+		//p.printContents();
 	}
 }

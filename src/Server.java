@@ -42,7 +42,7 @@ class Server implements Runnable{
 			
 			if (p.getType() == 1){
 				//it's a data packet
-				if (p.getSeqNum() == expectedSequenceNumber){ //<--THIS RIGHT HERE IS THE TRUE CODE
+				if (p.getSeqNum() == expectedSequenceNumber){
 					fileWriter.print(p.getData());
 					sendAckPacket(p, dgsOut, iaOut);
 					expectedSequenceNumber++;
@@ -80,7 +80,7 @@ class Server implements Runnable{
 		return p;
 	}
 	public static void sendAckPacket(packet p, DatagramSocket dgs, InetAddress ia) throws IOException{
-		packet pOut = new packet(0, p.getSeqNum(), 0, "");
+		packet pOut = new packet(0, p.getSeqNum()+1, 0, "");
 		byte[] sendBuf = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(sendBuf, sendBuf.length, ia, sendToEmulator);
 		dgs.send(dgPacket);
