@@ -53,6 +53,7 @@ class Client{
 			}
 		}
 		
+		sendEndOfTransmission(dgsOut, iaOut, totalPackets);
 		acklog.close();
 		seqnumlog.close();
 		say("CLIENT: Client closed.");
@@ -61,6 +62,13 @@ class Client{
 	
 	public static void say(String s){
 		System.out.println(s);
+	}
+	
+	public static void sendEndOfTransmission(DatagramSocket dgsOut, InetAddress iaOut, int totalPackets
+			) throws UnknownHostException, IOException, ClassNotFoundException{
+			packet p = new packet(3, totalPackets, 0, "");
+			sendDatagramPacket(p, dgsOut, iaOut);
+			packet pIn = receiveDatagramAndConvert();
 	}
 	
 	public static int sendAllPacketsInclusiveFromXtoY(int first, int last, ArrayList<packet> pList, 
@@ -76,7 +84,7 @@ class Client{
 	public static void sendDatagramPacket(packet p, DatagramSocket dgs, InetAddress ia) throws IOException, ClassNotFoundException{
 		byte[] sendBuf = makeByteArrayFromPacket(p);
 		seqnumlog.println(p.getSeqNum());
-		say("CLIENT: Just sent a packet with sequence number: " + p.getSeqNum());
+		say("CLIENT: Just sent a packet with sequence number: " + p.getSeqNum() + " (Mod: " + p.getSeqNum()%8 + ")");
 		DatagramPacket packet = new DatagramPacket(sendBuf, sendBuf.length, ia, 6000);
 		dgs.send(packet);
 	}
@@ -91,7 +99,7 @@ class Client{
 		ObjectInputStream oinSt = new ObjectInputStream(inSt);        
 		packet p = (packet) oinSt.readObject();
 		acklog.println(p.getSeqNum());
-		say("CLIENT: Just received a packet with sequence number: " + p.getSeqNum());
+		say("CLIENT: Just received a packet with sequence number: " + p.getSeqNum() + " (Mod: " + p.getSeqNum()%8 + ")");
 		return p;
 	}
 	
@@ -137,9 +145,6 @@ class Client{
 			}
 			localSequenceNumber++;
 		}
-		
-		packet EOTpacket = new packet(3, localSequenceNumber, 0, "");
-		packetsList.add(EOTpacket);
 		
 		return packetsList;
 	}
