@@ -43,15 +43,9 @@ class Server implements Runnable{
 			if (p.getType() == 1){
 				//it's a data packet
 				if (p.getSeqNum() == expectedSequenceNumber){ //<--THIS RIGHT HERE IS THE TRUE CODE
-					if (p.getSeqNum() == 15 && dropPacket15){
-						//do nothing
-						dropPacket15 = false;
-					}
-					else{
-						fileWriter.print(p.getData());
-						sendAckPacket(p, dgsOut, iaOut);
-						expectedSequenceNumber++;
-					}
+					fileWriter.print(p.getData());
+					sendAckPacket(p, dgsOut, iaOut);
+					expectedSequenceNumber++;
 				}
 				else{
 					sendExpectationPacket(dgsOut, iaOut);
@@ -81,6 +75,7 @@ class Server implements Runnable{
 		ByteArrayInputStream inSt = new ByteArrayInputStream(recBuf);
 		ObjectInputStream oinSt = new ObjectInputStream(inSt);        
 		packet p = (packet) oinSt.readObject();
+		printReceivedPacketToConsole(p);
 		arrivallog.println(p.getSeqNum());
 		return p;
 	}
@@ -89,6 +84,7 @@ class Server implements Runnable{
 		byte[] sendBuf = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(sendBuf, sendBuf.length, ia, sendToEmulator);
 		dgs.send(dgPacket);
+		printSentPacketToConsole(p);
 	}
 	
 	public static void sendExpectationPacket(DatagramSocket dgsOut, InetAddress ia) throws IOException{
@@ -96,6 +92,7 @@ class Server implements Runnable{
 		byte[] packetAsBytes = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
 		dgsOut.send(dgPacket);
+		printSentPacketToConsole(pOut);
 	}
 	
 	public static void sendEndOfTransmissionPacket(packet pIn, DatagramSocket dgsOut, InetAddress ia) throws IOException{
@@ -103,6 +100,7 @@ class Server implements Runnable{
 		byte [] packetAsBytes = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
 		dgsOut.send(dgPacket);
+		printSentPacketToConsole(pOut);
 	}
 	
 	public static packet makePacketFromByteArray(DatagramPacket dgp, byte[] buff) throws IOException, ClassNotFoundException{
@@ -135,6 +133,16 @@ class Server implements Runnable{
 			sendToEmulator = Integer.parseInt(args[2]);
 			fileName = args[3];
 		}
+	}
+	
+	public static void printSentPacketToConsole(packet p){
+		System.out.println("Server just sent a packet: ");
+		p.printContents();
+	}
+	
+	public static void printReceivedPacketToConsole(packet p){
+		System.out.println("Server just received a packet: ");
+		p.printContents();
 	}
 
 	@Override

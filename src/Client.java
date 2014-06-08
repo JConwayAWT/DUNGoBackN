@@ -21,8 +21,7 @@ import java.util.Scanner;
 class Client implements Runnable{
 	public static int sequenceNumber = 0;
 	public static int windowSize = 7;
-	public static int lastSentButUnackedPacketNumber;
-	
+	public static int oldestSentButUnackedPacketNumber = 0;
 	
 	public static Boolean eclipseMode = true;
 	public static String emulatorName = "localhost";
@@ -50,49 +49,70 @@ class Client implements Runnable{
 		packetsList = createAllPacketsFor(content, packetsList);
 		int totalPackets = packetsList.size();
 		
-		while(sequenceNumber < totalPackets){
+		//Fire off the first bunch.
+		for(int i = 0; i < windowSize; i++){
+			sendDatagramPacket(packetsList.get(i), dgsOut, iaOut);
+			sequenceNumber++;
+		} //now sequence number = 7
+		
+		
+		dgsIn.setSoTimeout(800);
+		while(oldestSentButUnackedPacketNumber < totalPackets)
+		{
 			try{
-				sendDatagramPacket(packetsList.get(sequenceNumber), dgsOut, iaOut);
+				packet pIn = receiveDatagramAndConvert();
+				int ackNumber = pIn.getSeqNum();
+				if (ackNumber > oldestSentButUnackedPacketNumber){
+					//We received the correct packet.
+					oldestSentButUnackedPacketNumber = ackNumber + 1;
+					sequenceNumber = oldestSentButUnackedPacketNumber + windowSize;
+					if (sequenceNumber < totalPackets){sendDatagramPacket(packetsList.get(sequenceNumber), dgsOut, iaOut);}
+				}
+				else{
+					//We got the wrong packet =( Start again from the last sent but unacked packet.
+					sendDatagramPacket(packetsList.get(oldestSentButUnackedPacketNumber), dgsOut, iaOut);
+					sequenceNumber = oldestSentButUnackedPacketNumber;
+				}
 			}
 			catch(SocketTimeoutException e){
-				System.out.println("Timeout with SEQNO=" + sequenceNumber);
+				//hm, we're not supposed to have any timeouts...
+				sequenceNumber = 100;
 			}
 		}
 		
-		sendEndOfTransmission(dgsOut, iaOut);
+		sendEndOfTransmission(dgsOut, iaOut, totalPackets);
 		acklog.close();
 		seqnumlog.close();
 		
 	}
 	
 	
-	public static void sendEndOfTransmission(DatagramSocket dgsOut, InetAddress iaOut
+	public static void sendEndOfTransmission(DatagramSocket dgsOut, InetAddress iaOut, int totalPackets
 		) throws UnknownHostException, IOException, ClassNotFoundException{
-		packet p = new packet(3, sequenceNumber, 0, "");
-		sendDatagramPacket(p, dgsOut, iaOut);		
+		packet p = new packet(3, totalPackets, 0, "");
+		sendDatagramPacket(p, dgsOut, iaOut);
+		packet pIn = receiveDatagramAndConvert();
 	}
 	
 	public static void sendDatagramPacket(packet p, DatagramSocket dgs, InetAddress ia) throws IOException, ClassNotFoundException{
 		byte[] sendBuf = makeByteArrayFromPacket(p);
+		seqnumlog.println(p.getSeqNum());
 		DatagramPacket packet = new DatagramPacket(sendBuf, sendBuf.length, ia, 6000);
 		dgs.send(packet);
-		seqnumlog.println(p.getSeqNum());
-		
-		packet pIn = receiveDatagramAndConvert();
-		acklog.println(pIn.getSeqNum());
+		printSentPacketToConsole(p);
 	}
 	
 	public static packet receiveDatagramAndConvert() throws IOException, ClassNotFoundException{
 		byte[] recBuf = new byte[1024];
 		DatagramPacket recpacket = new DatagramPacket(recBuf, recBuf.length);
 		
-		dgsIn.setSoTimeout(2000);
 		dgsIn.receive(recpacket); //<!!--THIS IS A BLOCKING CALL OMG--!!>
 		
 		ByteArrayInputStream inSt = new ByteArrayInputStream(recBuf);
 		ObjectInputStream oinSt = new ObjectInputStream(inSt);        
 		packet p = (packet) oinSt.readObject();
-		sequenceNumber++;
+		acklog.println(p.getSeqNum());
+		printReceivedPacketToConsole(p);
 		return p;
 	}
 	
@@ -110,6 +130,7 @@ class Client implements Runnable{
 		ByteArrayInputStream bais = new ByteArrayInputStream(byteArray);
 		ObjectInput in = new ObjectInputStream(bais);
 		p = (packet) in.readObject();
+		printReceivedPacketToConsole(p);
 		return p;
 	}
 	
@@ -155,5 +176,15 @@ class Client implements Runnable{
 			receiveFromEmulator = Integer.parseInt(args[2]);
 			fileName = args[3];
 		}
+	}
+	
+	public static void printSentPacketToConsole(packet p){
+		System.out.println("Client just sent a packet: ");
+		p.printContents();
+	}
+	
+	public static void printReceivedPacketToConsole(packet p){
+		System.out.println("Client just received a packet: ");
+		p.printContents();
 	}
 }
