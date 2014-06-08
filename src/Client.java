@@ -1,24 +1,9 @@
-import java.awt.List;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.PrintWriter;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
-import java.net.UnknownHostException;
+import java.io.*;
+import java.net.*;
 import java.util.ArrayList;
 import java.util.Scanner;
 
-class Client implements Runnable{
+class Client{
 	public static int windowSize = 7;
 	public static Boolean eclipseMode = true;
 	public static String emulatorName = "localhost";
@@ -37,7 +22,6 @@ class Client implements Runnable{
 		dgsOut.connect(iaOut, sendToEmulator);
 		
 		dgsIn = new DatagramSocket(receiveFromEmulator);
-		
 		seqnumlog = new PrintWriter("seqnum.log","UTF-8");
 		acklog = new PrintWriter("ack.log","UTF-8");
 		
@@ -56,30 +40,22 @@ class Client implements Runnable{
 		dgsIn.setSoTimeout(800);
 		int timesToListen = Math.min(7, totalPackets);
 		int ackNumber = 0;
-		int firstAckNumber = 0;
-		int secondAckNumber = 0;
 		
 		while (ackNumber < totalPackets){
 			try{
 				for(int i = 0; i < timesToListen; i++){
 					ackNumber = receiveDatagramAndConvert().getSeqNum();
-					if (i == 0){firstAckNumber = ackNumber;}
-					if (i == 1){secondAckNumber = ackNumber;}
-					if (i == 1 && firstAckNumber == secondAckNumber){say("Quitting early"); break;}
-					if (ackNumber == totalPackets){break;}
 				}
-				int times = sendAllPacketsInclusiveFromXtoY(ackNumber, ackNumber+6, packetsList, dgsOut, iaOut);
-				timesToListen = times;
+				timesToListen = sendAllPacketsInclusiveFromXtoY(ackNumber, ackNumber+6, packetsList, dgsOut, iaOut);
 			}
 			catch(SocketTimeoutException e){
 				timesToListen = 0;
 			}
 		}
 		
-		sendEndOfTransmission(dgsOut, iaOut, totalPackets);
 		acklog.close();
 		seqnumlog.close();
-		say("Client closed.");
+		say("CLIENT: Client closed.");
 		
 	}
 	
@@ -95,13 +71,6 @@ class Client implements Runnable{
 			sendDatagramPacket(pList.get(i), dgsOut, iaOut);
 		}
 		return last-first+1;
-	}
-	
-	public static void sendEndOfTransmission(DatagramSocket dgsOut, InetAddress iaOut, int totalPackets
-		) throws UnknownHostException, IOException, ClassNotFoundException{
-		packet p = new packet(3, totalPackets, 0, "");
-		sendDatagramPacket(p, dgsOut, iaOut);
-		packet pIn = receiveDatagramAndConvert();
 	}
 	
 	public static void sendDatagramPacket(packet p, DatagramSocket dgs, InetAddress ia) throws IOException, ClassNotFoundException{
@@ -153,12 +122,6 @@ class Client implements Runnable{
  	}
 
 
-	@Override
-	public void run() {
-		// TODO Auto-generated method stub
-		
-	}
-	
 	public static ArrayList<packet> createAllPacketsFor(String content, ArrayList<packet> packetsList){
 		int localSequenceNumber = 0;
 		while (content.length() > 0){
@@ -174,6 +137,9 @@ class Client implements Runnable{
 			}
 			localSequenceNumber++;
 		}
+		
+		packet EOTpacket = new packet(3, localSequenceNumber, 0, "");
+		packetsList.add(EOTpacket);
 		
 		return packetsList;
 	}
