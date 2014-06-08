@@ -13,9 +13,12 @@ class Client{
 	public static PrintWriter seqnumlog;
 	public static PrintWriter acklog;
 	public static DatagramSocket dgsIn;
+	public static ArrayList<Integer> lastSentAtPosition;
 	
 	public static void main(String args[]) throws Exception{
 		setCommandLineVariables(args);
+		lastSentAtPosition = new ArrayList<Integer>(7);
+		while(lastSentAtPosition.size() <= windowSize){lastSentAtPosition.add(-1);}
 		
 		DatagramSocket dgsOut = new DatagramSocket();
 		InetAddress iaOut = InetAddress.getByName(emulatorName);
@@ -58,6 +61,10 @@ class Client{
 		seqnumlog.close();
 		say("CLIENT: Client closed.");
 		
+		for(int i=0; i < lastSentAtPosition.size(); i++){
+			say("Array" + i + ":" + lastSentAtPosition.get(i));
+		}
+		
 	}
 	
 	public static void say(String s){
@@ -77,6 +84,7 @@ class Client{
 		last = Math.min(last, pList.size()-1);
 		for(int i=first; i <= last; i++){
 			sendDatagramPacket(pList.get(i), dgsOut, iaOut);
+			lastSentAtPosition.set(i%8, i);
 		}
 		return last-first+1;
 	}

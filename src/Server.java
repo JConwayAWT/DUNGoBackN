@@ -42,7 +42,7 @@ class Server implements Runnable{
 			
 			if (p.getType() == 1){
 				//it's a data packet
-				if (p.getSeqNum() == expectedSequenceNumber){
+				if (p.getSeqNum()%8 == (expectedSequenceNumber%8)){
 					fileWriter.print(p.getData());
 					sendAckPacket(p, dgsOut, iaOut);
 					expectedSequenceNumber++;
