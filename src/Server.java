@@ -42,7 +42,7 @@ class Server implements Runnable{
 			
 			if (p.getType() == 1){
 				//it's a data packet
-				if (p.getSeqNum()%8 == (expectedSequenceNumber%8)){
+				if (p.getSeqNum() == (expectedSequenceNumber%8)){
 					fileWriter.print(p.getData());
 					sendAckPacket(p, dgsOut, iaOut);
 					expectedSequenceNumber++;
@@ -84,7 +84,7 @@ class Server implements Runnable{
 		return p;
 	}
 	public static void sendAckPacket(packet p, DatagramSocket dgs, InetAddress ia) throws IOException{
-		packet pOut = new packet(0, p.getSeqNum()+1, 0, "");
+		packet pOut = new packet(0, (p.getSeqNum()+1)%8, 0, "");
 		byte[] sendBuf = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(sendBuf, sendBuf.length, ia, sendToEmulator);
 		dgs.send(dgPacket);
@@ -92,7 +92,7 @@ class Server implements Runnable{
 	}
 	
 	public static void sendExpectationPacket(DatagramSocket dgsOut, InetAddress ia) throws IOException{
-		packet pOut = new packet(0, expectedSequenceNumber,0, "");
+		packet pOut = new packet(0, expectedSequenceNumber%8,0, "");
 		byte[] packetAsBytes = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
 		dgsOut.send(dgPacket);
@@ -100,7 +100,7 @@ class Server implements Runnable{
 	}
 	
 	public static void sendEndOfTransmissionPacket(packet pIn, DatagramSocket dgsOut, InetAddress ia) throws IOException{
-		packet pOut = new packet(2, pIn.getSeqNum()+1,0,"");
+		packet pOut = new packet(2, (pIn.getSeqNum()+1)%8,0,"");
 		byte [] packetAsBytes = makeByteArrayFromPacket(pOut);
 		DatagramPacket dgPacket = new DatagramPacket(packetAsBytes, packetAsBytes.length, ia, sendToEmulator);
 		dgsOut.send(dgPacket);

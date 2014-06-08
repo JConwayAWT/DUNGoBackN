@@ -17,8 +17,8 @@ class Client{
 	
 	public static void main(String args[]) throws Exception{
 		setCommandLineVariables(args);
-		lastSentAtPosition = new ArrayList<Integer>(7);
-		while(lastSentAtPosition.size() <= windowSize){lastSentAtPosition.add(-1);}
+		lastSentAtPosition = new ArrayList<Integer>(windowSize+1);
+		initializeSends();
 		
 		DatagramSocket dgsOut = new DatagramSocket();
 		InetAddress iaOut = InetAddress.getByName(emulatorName);
@@ -43,13 +43,17 @@ class Client{
 		dgsIn.setSoTimeout(800);
 		int timesToListen = Math.min(7, totalPackets);
 		int ackNumber = 0;
+		int startIndex = 0;
 		
-		while (ackNumber < totalPackets){
+		while (startIndex < totalPackets){
 			try{
 				for(int i = 0; i < timesToListen; i++){
 					ackNumber = receiveDatagramAndConvert().getSeqNum();
 				}
-				timesToListen = sendAllPacketsInclusiveFromXtoY(ackNumber, ackNumber+6, packetsList, dgsOut, iaOut);
+				int indexer = ((((ackNumber - 1) % 8) + 8) % 8);
+				startIndex = lastSentAtPosition.get(indexer)+1;
+				say("Start index now = " + startIndex);
+				timesToListen = sendAllPacketsInclusiveFromXtoY(startIndex, startIndex+6, packetsList, dgsOut, iaOut);
 			}
 			catch(SocketTimeoutException e){
 				timesToListen = 0;
@@ -61,10 +65,6 @@ class Client{
 		seqnumlog.close();
 		say("CLIENT: Client closed.");
 		
-		for(int i=0; i < lastSentAtPosition.size(); i++){
-			say("Array" + i + ":" + lastSentAtPosition.get(i));
-		}
-		
 	}
 	
 	public static void say(String s){
@@ -73,7 +73,7 @@ class Client{
 	
 	public static void sendEndOfTransmission(DatagramSocket dgsOut, InetAddress iaOut, int totalPackets
 			) throws UnknownHostException, IOException, ClassNotFoundException{
-			packet p = new packet(3, totalPackets, 0, "");
+			packet p = new packet(3, totalPackets%8, 0, "");
 			sendDatagramPacket(p, dgsOut, iaOut);
 			packet pIn = receiveDatagramAndConvert();
 	}
@@ -86,6 +86,7 @@ class Client{
 			sendDatagramPacket(pList.get(i), dgsOut, iaOut);
 			lastSentAtPosition.set(i%8, i);
 		}
+		say("Last sent at position: " + lastSentAtPosition.toString());
 		return last-first+1;
 	}
 	
@@ -142,12 +143,12 @@ class Client{
 		int localSequenceNumber = 0;
 		while (content.length() > 0){
 			if (content.length() > 16){
-				packet newPacket = new packet(1, localSequenceNumber, 16, content.substring(0, 16));
+				packet newPacket = new packet(1, localSequenceNumber%8, 16, content.substring(0, 16));
 				content = content.substring(16, content.length());
 				packetsList.add(newPacket);
 			}
 			else{
-				packet newPacket = new packet(1, localSequenceNumber, content.length(), content);
+				packet newPacket = new packet(1, localSequenceNumber%8, content.length(), content);
 				content = "";
 				packetsList.add(newPacket);
 			}
@@ -155,6 +156,13 @@ class Client{
 		}
 		
 		return packetsList;
+	}
+	
+	public static void initializeSends(){
+		for(int i = 0; i <= windowSize; i++){
+			lastSentAtPosition.add(i);
+		}
+		
 	}
 	
 	public static void setCommandLineVariables(String args[]){
